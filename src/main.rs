@@ -1,5 +1,6 @@
 use astrolabe::{DateTime, DateUtilities, Offset, OffsetUtilities};
 use clap::Parser;
+use shellwords::split;
 use std::{process::Command, thread, time::Duration};
 use sunrise::sunrise_sunset;
 
@@ -12,6 +13,10 @@ struct HinodeArgs {
     /// Longitude of the location
     #[arg(long)]
     longitude: f64,
+    /// Command to run to get the current mode
+    /// Should return "dark" if dark mode and "light" if light mode
+    #[arg(long)]
+    get_mode_cmd: String,
     /// Command to run when switching to light mode
     #[arg(long)]
     light_mode_cmd: String,
@@ -70,8 +75,10 @@ fn main() {
 
         if args.debug {
             println!(
-                "Waiting until {} to switch to {} mode",
+                "Waiting until {} (Local time) (in {}h {}m) to switch to {} mode",
                 DateTime::from_timestamp(next_event).set_offset(Offset::Local),
+                offset_secs / 3600,
+                (offset_secs % 3600) / 60,
                 target_mode
             );
         }
@@ -86,17 +93,17 @@ fn sync_current_mode(args: &HinodeArgs) {
         println!("====Syncing current mode====");
     }
 
-    let appearance_output = Command::new("osascript")
-        .args([
-            "-l",
-            "JavaScript",
-            "-e",
-            "Application('System Events').appearancePreferences.darkMode()",
-        ])
+    let program = &split(&args.get_mode_cmd).unwrap()[0];
+    let arguments: Vec<String> = split(&args.get_mode_cmd)
+        .unwrap()
+        .into_iter()
+        .skip(1)
+        .collect();
+    let appearance_output = Command::new(program)
+        .args(arguments)
         .output()
         .expect("Failed to get current system appearance mode");
-
-    let is_dark_mode = appearance_output.stdout.starts_with(b"true");
+    let is_dark_mode = appearance_output.stdout.starts_with(b"dark");
 
     let now = DateTime::now_local();
     let (sunrise_today, sunset_today) = sunrise_sunset(
@@ -135,8 +142,8 @@ fn run_theme_cmd(mode: &str, args: &HinodeArgs) {
     } else {
         args.dark_mode_cmd.clone()
     };
-    let arguments = cmd.split_whitespace().skip(1).collect::<Vec<&str>>();
-    let program = cmd.split_whitespace().next().unwrap();
+    let program = &split(&cmd).unwrap()[0];
+    let arguments: Vec<String> = split(&cmd).unwrap().into_iter().skip(1).collect();
 
     Command::new(program)
         .args(arguments)
