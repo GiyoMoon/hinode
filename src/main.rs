@@ -23,6 +23,9 @@ struct HinodeArgs {
     /// Command to run when switching to dark mode
     #[arg(long)]
     dark_mode_cmd: String,
+    /// How long to sleep at once. Default is 600 seconds (10 minutes)
+    #[arg(long, default_value = 600)]
+    sleep_secs: bool,
     /// Whether to log debug information
     #[arg(long, default_value = "false")]
     debug: bool,
@@ -37,6 +40,7 @@ fn main() {
         println!("Longitude: {}", args.longitude);
         println!("Light mode command: {}", args.light_mode_cmd);
         println!("Dark mode command: {}", args.dark_mode_cmd);
+        println!("Check theme command: {}", args.get_mode_cmd);
         println!("====================");
     }
 
@@ -72,10 +76,16 @@ fn main() {
             "dark"
         };
         let offset_secs = next_event - now.timestamp();
+        let sleep_secs = if offset_secs > args.sleep_secs {
+            args.sleep_secs
+        } else {
+            offset_secs
+        };
 
         if args.debug {
             println!(
-                "Waiting until {} (Local time) (in {}h {}m) to switch to {} mode",
+                "[{}] Waiting until {} (in {}h {}m) to switch to {} mode",
+                DateTime::now_local(),
                 DateTime::from_timestamp(next_event).set_offset(Offset::Local),
                 offset_secs / 3600,
                 (offset_secs % 3600) / 60,
@@ -83,7 +93,7 @@ fn main() {
             );
         }
 
-        thread::sleep(Duration::from_secs(offset_secs as u64));
+        thread::sleep(Duration::from_secs(sleep_secs as u64));
         run_theme_cmd(target_mode, &args);
     }
 }
